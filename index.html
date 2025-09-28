@@ -1,153 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Camera App" />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="apple-touch-icon" href="icon.png" />
-  <title>Fullscreen Camera App</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      background: #000;
-      overflow: hidden;
-    }
-
-    .video-container {
-      position: absolute;
-      inset: 0;
-      overflow: hidden;
-      background: #000;
-    }
-
-    video {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      background: #000;
-      /* No video player UI */
-      -webkit-user-select: none;
-      user-select: none;
-      pointer-events: none;
-    }
-
-    .error {
-      color: white;
-      text-align: center;
-      padding: 20px;
-      font-family: Arial, sans-serif;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 80%;
-      z-index: 2;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Full Screen Camera</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: black;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+    </style>
 </head>
 <body>
-  <div class="video-container">
-    <!-- No controls attribute -->
-    <video id="cameraFeed" autoplay playsinline muted></video>
-  </div>
-  <div id="errorMessage" class="error" style="display:none;"></div>
+    <video id="cameraFeed" autoplay playsinline></video>
+    <script>
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user' },
+                    audio: false
+                });
+                const video = document.getElementById('cameraFeed');
+                video.srcObject = stream;
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+            }
+        }
 
-  <script>
-    let currentFacingMode = 'environment';
-    const video = document.getElementById('cameraFeed');
-    const errorMessage = document.getElementById('errorMessage');
-
-    async function startCamera(facingMode = currentFacingMode) {
-      if (video.srcObject) {
-        video.srcObject.getTracks().forEach(t => t.stop());
-        video.srcObject = null;
-      }
-
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showError('Camera access is not supported by this browser.');
-        return;
-      }
-      if (!window.isSecureContext) {
-        showError('Camera access requires a secure connection (HTTPS).');
-        return;
-      }
-
-      try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false
-        });
-
-        video.srcObject = newStream;
-        currentFacingMode = facingMode;
-        hideError();
-
-        updateVideoTransform();
-        await video.play().catch(() => {});
-      } catch (err) {
-        console.error('Error accessing camera:', err);
-        let text = 'Failed to access camera. ';
-        if (err.name === 'NotAllowedError') text += 'Please grant camera permissions and reload.';
-        else if (err.name === 'NotFoundError') text += 'No camera found for this mode.';
-        else if (err.name === 'NotReadableError') text += 'Camera is in use by another app.';
-        else text += 'An unexpected error occurred: ' + err.message;
-        showError(text);
-      }
-    }
-
-    function showError(msg) {
-      errorMessage.textContent = msg;
-      errorMessage.style.display = 'block';
-      video.style.display = 'none';
-    }
-
-    function hideError() {
-      errorMessage.style.display = 'none';
-      video.style.display = 'block';
-    }
-
-    function updateVideoTransform() {
-      if (currentFacingMode === 'user') {
-        // Mirror selfie camera
-        video.style.transform = 'translate(-50%, -50%) scaleX(-1)';
-      } else {
-        // Normal rear camera
-        video.style.transform = 'translate(-50%, -50%)';
-      }
-    }
-
-    // Swipe to toggle cameras
-    let touchStartX = 0;
-    video.addEventListener('touchstart', e => {
-      if (!e.touches.length) return;
-      touchStartX = e.touches[0].clientX;
-    }, { passive: true });
-
-    video.addEventListener('touchend', e => {
-      if (!e.changedTouches.length) return;
-      const deltaX = e.changedTouches[0].clientX - touchStartX;
-      if (deltaX < -50) {
-        currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-        startCamera(currentFacingMode);
-      }
-    });
-
-    window.addEventListener('resize', updateVideoTransform);
-    window.addEventListener('orientationchange', updateVideoTransform);
-    window.addEventListener('load', () => startCamera(currentFacingMode));
-
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      console.log('App is running in standalone mode!');
-    }
-  </script>
+        window.onload = startCamera;
+    </script>
 </body>
 </html>
