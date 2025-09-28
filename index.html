@@ -55,96 +55,50 @@
   </div>
 
   <script>
-    const app = document.getElementById('app');
-    const video = document.getElementById('camera');
+ const video = document.getElementById('camera');
 
-    let started = false;
-    let currentFacingMode = 'environment'; // rear by default
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+    } catch (err) {
+      console.error('Camera error:', err);
+    }
+  }
 
-    async function startCameraAndFullscreen(event) {
-      // Only handle first user interaction
-      if (started) return;
-      started = true;
+  function applyOrientationFix() {
+    const angle = window.orientation || 0; // iOS gives 0, 90, -90, 180
+    video.style.transform = '';
 
-      // Stop listening - we don't want any UI left
-      app.removeEventListener('click', startCameraAndFullscreen);
-      app.removeEventListener('touchend', startCameraAndFullscreen);
-
-      // Try to request fullscreen (works where allowed). This must be in a user gesture.
-      if (document.documentElement.requestFullscreen) {
-        try {
-          await document.documentElement.requestFullscreen();
-        } catch (err) {
-          // ignore if fullscreen fails
-          console.warn('requestFullscreen failed:', err && err.message);
-        }
-      }
-
-      // Start camera
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: currentFacingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false
-        });
-        video.srcObject = stream;
-        // ensure playing; some browsers require user gesture (we are in one)
-        await video.play().catch(()=>{});
-      } catch (err) {
-        console.error('Camera start failed:', err);
-        // If permission blocked or camera unavailable, do nothing visible (no UI).
+    // Only fix if running as standalone app
+    if (navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
+      switch (angle) {
+        case 90:
+          video.style.transform = 'rotate(90deg) scale(1.333,1.333)';
+          break;
+        case -90:
+        case 270:
+          video.style.transform = 'rotate(-90deg) scale(1.333,1.333)';
+          break;
+        case 180:
+          video.style.transform = 'rotate(180deg)';
+          break;
+        default:
+          video.style.transform = 'rotate(0deg)';
       }
     }
+  }
 
-    // Toggle camera (no UI). You can wire this to a gesture if you want:
-    async function toggleCamera() {
-      // stop tracks
-      if (video.srcObject) {
-        video.srcObject.getTracks().forEach(t => t.stop());
-        video.srcObject = null;
-      }
-      currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: currentFacingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false
-        });
-        video.srcObject = stream;
-        await video.play().catch(()=>{});
-      } catch (err) {
-        console.error('toggleCamera error:', err);
-      }
-    }
+  window.addEventListener('orientationchange', applyOrientationFix);
+  window.addEventListener('resize', applyOrientationFix);
 
-    // Attach initial gesture listeners (tap anywhere to start)
-    app.addEventListener('click', startCameraAndFullscreen, { once: true, passive: true });
-    app.addEventListener('touchend', startCameraAndFullscreen, { once: true, passive: true });
-
-    // Optional: double-tap with two fingers to toggle facing camera (hidden gesture)
-    let lastTap = 0;
-    app.addEventListener('touchend', (e) => {
-      const now = Date.now();
-      if (now - lastTap < 300 && e.touches && e.touches.length === 0) {
-        // quick double tap - toggle camera
-        toggleCamera();
-      }
-      lastTap = now;
-    }, { passive: true });
-
-    // If the PWA is reopened from home screen, try to auto-start silently (some browsers allow it)
-    window.addEventListener('load', () => {
-      // If already in standalone mode and permissions were previously granted, attempt to start without extra gesture.
-      if (navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
-        // Attempt to start only if user already granted permission previously
-        // (we still need a user gesture for fullscreen in many browsers)
-        // So we keep the first-tap behavior; this attempt is a no-op if permission not granted.
-        navigator.permissions && navigator.permissions.query({ name: 'camera' }).then(p => {
-          if (p.state === 'granted') {
-            // directly try to start camera (may still require user gesture for fullscreen)
-            startCameraAndFullscreen();
-          }
-        }).catch(()=>{});
-      }
-    });
-  </script>
+  window.addEventListener('load', () => {
+    startCamera().then(applyOrientationFix);
+  });
+</script>
 </body>
 </html>
