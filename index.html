@@ -83,7 +83,7 @@
         video.srcObject = newStream;
         currentFacingMode = facingMode; // Update current facing mode
         errorMessage.style.display = 'none';
-        updateVideoOrientation(); // Reapply orientation after camera switch
+        updateVideoOrientation(); // Apply fixed orientation correction
       } catch (err) {
         console.error('Error accessing camera:', err);
         let errorText = 'Failed to access camera. ';
@@ -104,19 +104,8 @@
 
     function updateVideoOrientation() {
       const video = document.getElementById('cameraFeed');
-      const orientation = window.orientation || screen.orientation?.angle || 0;
-      let rotate = 0;
-
-      // Adjust for iOS camera stream being 90 degrees clockwise off in landscape
-      if (orientation === 90) {
-        rotate = -90; // Counteract 90-degree clockwise rotation
-      } else if (orientation === -90) {
-        rotate = 90;  // Counteract -90-degree clockwise rotation
-      } else if (orientation === 180) {
-        rotate = 180; // Handle upside down
-      }
-
-      video.style.transform = `rotate(${rotate}deg)`;
+      // Apply fixed 90-degree counterclockwise rotation to correct 90-degree clockwise offset
+      video.style.transform = 'rotate(-90deg)';
     }
 
     // Swipe detection
@@ -139,9 +128,6 @@
 
     // Initialize
     window.addEventListener('load', startCamera);
-    window.addEventListener('orientationchange', updateVideoOrientation);
-    window.addEventListener('resize', updateVideoOrientation);
-    updateVideoOrientation();
 
     if (window.matchMedia('(display-mode: standalone)').matches) {
       console.log('App is running in standalone mode!');
