@@ -19,6 +19,7 @@
       height: 100vh;
       overflow: hidden;
       background-color: #000;
+      touch-action: none; /* Disable default touch actions for custom swipe */
     }
     video {
       width: 100%;
@@ -45,9 +46,17 @@
   <video id="cameraFeed" autoplay playsinline></video>
   <div id="errorMessage" class="error" style="display: none;"></div>
   <script>
-    async function startCamera() {
+    let currentFacingMode = 'environment'; // Start with rear camera
+
+    async function startCamera(facingMode = currentFacingMode) {
       const video = document.getElementById('cameraFeed');
       const errorMessage = document.getElementById('errorMessage');
+      const stream = video.srcObject;
+
+      if (stream) {
+        const tracks = stream.getTracks();
+        tracks.forEach(track => track.stop()); // Stop current stream
+      }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         errorMessage.textContent = 'Camera access is not supported by this browser.';
@@ -64,15 +73,16 @@
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const newStream = await navigator.mediaDevices.getUserMedia({
           video: { 
-            facingMode: 'environment', // Rear camera
+            facingMode: facingMode,
             width: { ideal: 1920 },
             height: { ideal: 1080 }
           },
           audio: false
         });
-        video.srcObject = stream;
+        video.srcObject = newStream;
+        currentFacingMode = facingMode; // Update current facing mode
         errorMessage.style.display = 'none';
       } catch (err) {
         console.error('Error accessing camera:', err);
@@ -80,7 +90,7 @@
         if (err.name === 'NotAllowedError') {
           errorText += 'Please grant camera permissions and reload.';
         } else if (err.name === 'NotFoundError') {
-          errorText += 'No camera found.';
+          errorText += 'No camera found for this mode.';
         } else if (err.name === 'NotReadableError') {
           errorText += 'Camera is in use by another app.';
         } else {
@@ -95,26 +105,43 @@
     function updateVideoOrientation() {
       const video = document.getElementById('cameraFeed');
       const orientation = window.orientation || screen.orientation?.angle || 0;
-
-      // Adjust rotation based on device orientation
-      // iPad landscape: 90 or -90 degrees
       let rotate = 0;
       if (orientation === 90 || orientation === -90) {
-        rotate = orientation; // Rotate 90 or -90 degrees for landscape
+        rotate = orientation;
       } else if (orientation === 180) {
-        rotate = 180; // Upside down (less common on iPad)
+        rotate = 180;
       }
-
       video.style.transform = `rotate(${rotate}deg)`;
     }
 
-    // Start camera and set initial orientation
+    // Swipe detection
+    let touchStartX = 0;
+    const video = document.getElementById('cameraFeed');
+    video.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+    });
+
+    video.addEventListener('touchmove', (e) => {
+      e.preventDefault(); // Prevent scrolling
+    });
+
+    video.addEventListener('touchend', (e) => {
+      const touchEndX = e.changedTouches[0].clientX;
+      const deltaX = touchEndX - touchStartX;
+      const swipeThreshold = 50; // Minimum distance for swipe detection
+
+      if (deltaX < -swipeThreshold) { // Swipe left
+        currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+        startCamera(currentFacingMode);
+      }
+    });
+
+    // Initialize
     window.addEventListener('load', startCamera);
     window.addEventListener('orientationchange', updateVideoOrientation);
-    window.addEventListener('resize', updateVideoOrientation); // Handle resize events
-    updateVideoOrientation(); // Set initial orientation
+    window.addEventListener('resize', updateVideoOrientation);
+    updateVideoOrientation();
 
-    // Detect standalone mode
     if (window.matchMedia('(display-mode: standalone)').matches) {
       console.log('App is running in standalone mode!');
     }
