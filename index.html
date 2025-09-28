@@ -27,12 +27,17 @@
 
     video {
       position: absolute;
-      left: 50%;
       top: 50%;
-      transform-origin: center center;
-      transition: transform 0.2s ease;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 100%;
+      height: 100%;
       object-fit: cover;
-      will-change: transform, width, height;
+      background: #000;
+      /* No video player UI */
+      -webkit-user-select: none;
+      user-select: none;
+      pointer-events: none;
     }
 
     .error {
@@ -51,6 +56,7 @@
 </head>
 <body>
   <div class="video-container">
+    <!-- No controls attribute -->
     <video id="cameraFeed" autoplay playsinline muted></video>
   </div>
   <div id="errorMessage" class="error" style="display:none;"></div>
@@ -85,7 +91,7 @@
         currentFacingMode = facingMode;
         hideError();
 
-        video.addEventListener('loadedmetadata', updateVideoOrientation, { once: true });
+        updateVideoTransform();
         await video.play().catch(() => {});
       } catch (err) {
         console.error('Error accessing camera:', err);
@@ -109,20 +115,17 @@
       video.style.display = 'block';
     }
 
-    function updateVideoOrientation() {
-      // always size to viewport
-      video.style.width = `${window.innerWidth}px`;
-      video.style.height = `${window.innerHeight}px`;
-
-      // mirror if selfie camera
+    function updateVideoTransform() {
       if (currentFacingMode === 'user') {
+        // Mirror selfie camera
         video.style.transform = 'translate(-50%, -50%) scaleX(-1)';
       } else {
+        // Normal rear camera
         video.style.transform = 'translate(-50%, -50%)';
       }
     }
 
-    // swipe to toggle cameras
+    // Swipe to toggle cameras
     let touchStartX = 0;
     video.addEventListener('touchstart', e => {
       if (!e.touches.length) return;
@@ -138,8 +141,8 @@
       }
     });
 
-    window.addEventListener('resize', updateVideoOrientation);
-    window.addEventListener('orientationchange', updateVideoOrientation);
+    window.addEventListener('resize', updateVideoTransform);
+    window.addEventListener('orientationchange', updateVideoTransform);
     window.addEventListener('load', () => startCamera(currentFacingMode));
 
     if (window.matchMedia('(display-mode: standalone)').matches) {
