@@ -2,145 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <!-- Helpful PWA hints for iOS home-screen install -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Camera</title>
+  <title>Fullscreen Camera</title>
   <style>
-    /* Full-bleed reset */
     html, body {
-      height: 100%;
-      width: 100%;
       margin: 0;
-      background: #000;
-      overflow: hidden;
-      -webkit-user-select: none;
-      user-select: none;
-      -webkit-touch-callout: none;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden; /* 🔑 no scrolling */
+      background: black;
     }
-
-    /* Video fills and is centered. object-fit ensures cover behavior. */
-    video#cam {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      min-width: 100%;
-      min-height: 100%;
-      width: auto;
-      height: auto;
-      object-fit: cover;
-      background: #000;
-      /* not a player: no controls, pointer events allowed so gestures work */
+    video {
+      position: fixed; /* 🔑 lock to viewport */
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover; /* fill screen without scroll */
+      background: black;
     }
-
-    /* Invisible accessible text for screen readers (no visible UI) */
-    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); border:0; }
   </style>
 </head>
 <body>
-  <video id="cam" autoplay playsinline muted></video>
-  <div class="sr-only" aria-hidden="false">Camera full screen — tap to allow camera if prompted.</div>
+  <video id="camera" autoplay playsinline muted></video>
 
   <script>
-  (function () {
-    const video = document.getElementById('cam');
-
-    // default to back camera
-    let facingMode = 'environment';
-    let stream = null;
-    let started = false;
-
-    async function startCamera(auto = false) {
-      // if already started, do nothing
-      if (started) return;
-      started = true;
-
-      // stop previous stream if any
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-        stream = null;
-      }
-
+    async function startCamera() {
+      const video = document.getElementById('camera');
       try {
-        const s = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
           audio: false
         });
-        stream = s;
-        video.srcObject = s;
-
-        // try to play (some browsers require explicit play call)
-        await video.play().catch(()=>{});
+        video.srcObject = stream;
       } catch (err) {
-        // If autoplay / permission blocked, allow a user gesture to start later.
-        console.warn('startCamera failed:', err);
-        started = false;
+        console.error("Camera error:", err);
       }
     }
 
-    // Try to start immediately on load (will work in many browsers / if permission already granted)
-    window.addEventListener('load', () => {
-      // Kick off but don't force user gesture here
-      startCamera(true);
-    });
-
-    // If the browser blocks autoplay, allow the first user gesture to start the camera (silent)
-    function userGestureStart() {
-      if (started) return;
-      // Start camera now (this call is inside a user gesture)
-      startCamera();
-      // Request fullscreen where supported (attempt; may be ignored)
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(()=>{});
-      }
-      // remove the gesture listeners after first use
-      removeGestureListeners();
-    }
-
-    function removeGestureListeners() {
-      document.removeEventListener('click', userGestureStart);
-      document.removeEventListener('touchend', userGestureStart);
-    }
-
-    // Attach gesture listeners so camera can be started by tapping anywhere (only if needed)
-    document.addEventListener('click', userGestureStart, { passive: true });
-    document.addEventListener('touchend', userGestureStart, { passive: true });
-
-    // Hidden double-tap to toggle front/back camera (no UI)
-    let lastTap = 0;
-    document.addEventListener('touchend', (e) => {
-      const now = Date.now();
-      if (now - lastTap < 300) {
-        // double-tap detected: toggle facing mode
-        facingMode = (facingMode === 'environment') ? 'user' : 'environment';
-        // restart camera with new facing
-        started = false;
-        startCamera();
-      }
-      lastTap = now;
-    }, { passive: true });
-
-    // If window resizes, keep video covering viewport. The CSS with min-width/min-height + translate does this.
-    // But some iOS standalone quirks need a small reflow: reapply transform/size on resize.
-    let resizeTimer = null;
-    window.addEventListener('resize', () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        // small nudge to re-layout the video element
-        video.style.transform = 'translate(-50%, -50%)';
-      }, 120);
-    });
-
-    // expose a tiny debug API in console if you want to force-start / stop / toggle
-    window.__camSite = {
-      start: () => startCamera(),
-      stop: () => { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; started = false; } },
-      toggleFacing: () => { facingMode = (facingMode === 'environment') ? 'user' : 'environment'; started = false; startCamera(); },
-      facingMode: () => facingMode
-    };
-  })();
+    window.addEventListener('load', startCamera);
   </script>
 </body>
 </html>
