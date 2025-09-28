@@ -19,7 +19,6 @@
       height: 100vh;
       overflow: hidden;
       background-color: #000;
-      touch-action: none; /* Disable default touch actions for custom swipe */
     }
     video {
       width: 100%;
@@ -84,6 +83,7 @@
         video.srcObject = newStream;
         currentFacingMode = facingMode; // Update current facing mode
         errorMessage.style.display = 'none';
+        updateVideoOrientation(); // Reapply orientation after camera switch
       } catch (err) {
         console.error('Error accessing camera:', err);
         let errorText = 'Failed to access camera. ';
@@ -119,10 +119,6 @@
     const video = document.getElementById('cameraFeed');
     video.addEventListener('touchstart', (e) => {
       touchStartX = e.touches[0].clientX;
-    });
-
-    video.addEventListener('touchmove', (e) => {
-      e.preventDefault(); // Prevent scrolling
     });
 
     video.addEventListener('touchend', (e) => {
