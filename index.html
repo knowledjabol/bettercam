@@ -3,13 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <!-- iOS-specific meta tags for full-screen PWA -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Camera App">
-  <!-- Link to manifest file -->
   <link rel="manifest" href="manifest.json">
-  <!-- Icon for home screen -->
   <link rel="apple-touch-icon" href="icon.png">
   <title>Fullscreen Camera App</title>
   <style>
@@ -53,8 +50,7 @@
       const stream = video.srcObject;
 
       if (stream) {
-        const tracks = stream.getTracks();
-        tracks.forEach(track => track.stop()); // Stop current stream
+        stream.getTracks().forEach(track => track.stop()); // Stop current stream
       }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -81,9 +77,9 @@
           audio: false
         });
         video.srcObject = newStream;
-        currentFacingMode = facingMode; // Update current facing mode
+        currentFacingMode = facingMode;
         errorMessage.style.display = 'none';
-        updateVideoOrientation(); // Apply fixed orientation correction
+        updateVideoOrientation();
       } catch (err) {
         console.error('Error accessing camera:', err);
         let errorText = 'Failed to access camera. ';
@@ -104,11 +100,17 @@
 
     function updateVideoOrientation() {
       const video = document.getElementById('cameraFeed');
-      // Apply fixed 90-degree counterclockwise rotation to correct 90-degree clockwise offset
-      video.style.transform = 'rotate(-90deg)';
+
+      if (currentFacingMode === 'user') {
+        // Mirror the selfie camera
+        video.style.transform = 'scaleX(-1)';
+      } else {
+        // Rear camera should be shown normally
+        video.style.transform = '';
+      }
     }
 
-    // Swipe detection
+    // Swipe detection for switching cameras
     let touchStartX = 0;
     const video = document.getElementById('cameraFeed');
     video.addEventListener('touchstart', (e) => {
@@ -118,7 +120,7 @@
     video.addEventListener('touchend', (e) => {
       const touchEndX = e.changedTouches[0].clientX;
       const deltaX = touchEndX - touchStartX;
-      const swipeThreshold = 50; // Minimum distance for swipe detection
+      const swipeThreshold = 50;
 
       if (deltaX < -swipeThreshold) { // Swipe left
         currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
