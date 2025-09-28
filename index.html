@@ -9,44 +9,42 @@
   <meta name="apple-mobile-web-app-title" content="Camera" />
   <link rel="manifest" href="/manifest.json" />
   <title>Camera</title>
-  <style>
-    /* Reset / full-bleed */
-    html,body {
-      height: 100%;
-      width: 100%;
-      margin: 0;
-      background: black;
-      overflow: hidden;
-      -webkit-user-select: none;
-      user-select: none;
-      -webkit-tap-highlight-color: transparent;
+  <script>
+  const video = document.getElementById('camera');
+
+  async function startCamera(facingMode = 'environment') {
+    if (video.srcObject) {
+      video.srcObject.getTracks().forEach(t => t.stop());
     }
 
-    /* container captures the initial tap */
-    .app {
-      position: fixed;
-      inset: 0;
-      background: black;
-      touch-action: none;
-    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
 
-    /* The video is the only visible element */
-    video#camera {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      background: black;
-      /* Allow touches to pass to container for the initial gesture */
-      pointer-events: none;
+      updateTransform(facingMode);
+    } catch (err) {
+      console.error('Camera error:', err);
     }
+  }
 
-    /* hidden accessible text for screen-readers (no visual UI) */
-    .sr-only { position: absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
-  </style>
+  function updateTransform(facingMode) {
+    if (facingMode === 'user') {
+      // Mirror selfie cam so it looks natural
+      video.style.transform = 'scaleX(-1)';
+    } else {
+      // Don’t rotate — iOS handles this
+      video.style.transform = 'none';
+    }
+  }
+
+  // Init
+  window.addEventListener('load', () => startCamera('environment'));
+</script>
+
 </head>
 <body>
   <div class="app" id="app">
