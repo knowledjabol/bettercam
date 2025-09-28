@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -64,6 +25,8 @@
       height: 100%;
       object-fit: cover;
       display: block;
+      transform-origin: center;
+      transition: transform 0.3s ease;
     }
     .error {
       color: white;
@@ -86,7 +49,6 @@
       const video = document.getElementById('cameraFeed');
       const errorMessage = document.getElementById('errorMessage');
 
-      // Check if getUserMedia is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         errorMessage.textContent = 'Camera access is not supported by this browser.';
         errorMessage.style.display = 'block';
@@ -94,9 +56,8 @@
         return;
       }
 
-      // Check for secure context (HTTPS or localhost)
       if (!window.isSecureContext) {
-        errorMessage.textContent = 'Camera access requires a secure connection (HTTPS). Please host this app on an HTTPS server.';
+        errorMessage.textContent = 'Camera access requires a secure connection (HTTPS).';
         errorMessage.style.display = 'block';
         video.style.display = 'none';
         return;
@@ -105,8 +66,8 @@
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { 
-            facingMode: 'environment', // Rear camera; use 'user' for front camera
-            width: { ideal: 1920 }, // Optimize for high resolution
+            facingMode: 'environment', // Rear camera
+            width: { ideal: 1920 },
             height: { ideal: 1080 }
           },
           audio: false
@@ -117,11 +78,11 @@
         console.error('Error accessing camera:', err);
         let errorText = 'Failed to access camera. ';
         if (err.name === 'NotAllowedError') {
-          errorText += 'Please grant camera permissions in your browser settings and reload.';
+          errorText += 'Please grant camera permissions and reload.';
         } else if (err.name === 'NotFoundError') {
-          errorText += 'No camera found on this device.';
+          errorText += 'No camera found.';
         } else if (err.name === 'NotReadableError') {
-          errorText += 'Camera is in use by another application.';
+          errorText += 'Camera is in use by another app.';
         } else {
           errorText += 'An unexpected error occurred: ' + err.message;
         }
@@ -131,10 +92,29 @@
       }
     }
 
-    // Start camera when the page loads
-    window.addEventListener('load', startCamera);
+    function updateVideoOrientation() {
+      const video = document.getElementById('cameraFeed');
+      const orientation = window.orientation || screen.orientation?.angle || 0;
 
-    // Detect if running in standalone mode
+      // Adjust rotation based on device orientation
+      // iPad landscape: 90 or -90 degrees
+      let rotate = 0;
+      if (orientation === 90 || orientation === -90) {
+        rotate = orientation; // Rotate 90 or -90 degrees for landscape
+      } else if (orientation === 180) {
+        rotate = 180; // Upside down (less common on iPad)
+      }
+
+      video.style.transform = `rotate(${rotate}deg)`;
+    }
+
+    // Start camera and set initial orientation
+    window.addEventListener('load', startCamera);
+    window.addEventListener('orientationchange', updateVideoOrientation);
+    window.addEventListener('resize', updateVideoOrientation); // Handle resize events
+    updateVideoOrientation(); // Set initial orientation
+
+    // Detect standalone mode
     if (window.matchMedia('(display-mode: standalone)').matches) {
       console.log('App is running in standalone mode!');
     }
