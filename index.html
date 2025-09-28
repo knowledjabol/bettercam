@@ -1,127 +1,146 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>Camera PWA</title>
-<style>
-  html,body { height:100%; margin:0; background:#000; overflow:hidden; -webkit-user-select:none; user-select:none;}
-  /* container covers the screen and receives touches */
-  .container {
-    position:fixed; inset:0; background:#000; overflow:hidden; touch-action:none;
-    display:block;
-  }
-  /* video will be explicitly sized by JS so it always covers the viewport */
-  video#camera {
-    position:absolute;
-    left:50%;
-    top:50%;
-    transform-origin:center center;
-    background:#000;
-    will-change: width,height,transform;
-    /* allow touches to pass to container by default */
-    pointer-events:none;
-  }
-  /* invisible helper (no UI) */
-  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <!-- Helpful PWA hints for iOS home-screen install -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Camera</title>
+  <style>
+    /* Full-bleed reset */
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      background: #000;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    /* Video fills and is centered. object-fit ensures cover behavior. */
+    video#cam {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      min-width: 100%;
+      min-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: cover;
+      background: #000;
+      /* not a player: no controls, pointer events allowed so gestures work */
+    }
+
+    /* Invisible accessible text for screen readers (no visible UI) */
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); border:0; }
+  </style>
 </head>
 <body>
-  <div class="container" id="container">
-    <video id="camera" autoplay playsinline muted></video>
-    <div class="sr-only">Camera view — tap once to start.</div>
-  </div>
+  <video id="cam" autoplay playsinline muted></video>
+  <div class="sr-only" aria-hidden="false">Camera full screen — tap to allow camera if prompted.</div>
 
-<script>
-(function(){
-  const video = document.getElementById('camera');
-  const container = document.getElementById('container');
+  <script>
+  (function () {
+    const video = document.getElementById('cam');
 
-  let currentFacing = 'environment';
-  let stream = null;
+    // default to back camera
+    let facingMode = 'environment';
+    let stream = null;
+    let started = false;
 
-  // detect standalone iOS/webapp mode
-  const isStandalone = (('standalone' in navigator && navigator.standalone) || window.matchMedia('(display-mode: standalone)').matches);
+    async function startCamera(auto = false) {
+      // if already started, do nothing
+      if (started) return;
+      started = true;
 
-  // debounce helper
-  function debounce(fn, wait=120) {
-    let t;
-    return (...args) => { clearTimeout(t); t = setTimeout(()=>fn(...args), wait); };
-  }
-
-  async function startCamera(facing = currentFacing) {
-    try {
-      // stop previous stream
+      // stop previous stream if any
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
         stream = null;
       }
 
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false
-      });
-      stream = s;
-      video.srcObject = s;
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false
+        });
+        stream = s;
+        video.srcObject = s;
 
-      // wait for metadata so we can size correctly
-      if (video.readyState >= 1) {
-        // metadata already available
-        fitVideoToScreen();
-      } else {
-        video.addEventListener('loadedmetadata', fitVideoToScreen, { once: true });
+        // try to play (some browsers require explicit play call)
+        await video.play().catch(()=>{});
+      } catch (err) {
+        // If autoplay / permission blocked, allow a user gesture to start later.
+        console.warn('startCamera failed:', err);
+        started = false;
       }
-
-      // start playing
-      await video.play().catch(()=>{ /* ignore autoplay rejections */ });
-    } catch (err) {
-      console.error('startCamera error:', err);
-    }
-  }
-
-  // compute and apply sizing & transform so video fills viewport and stays centered
-  function fitVideoToScreen() {
-    // fallback: if no metadata, fill screen
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    const vidW = video.videoWidth || 1280;
-    const vidH = video.videoHeight || 720;
-
-    // decide if the intrinsic orientation is landscape
-    const videoIsLandscape = vidW >= vidH;
-    const screenIsLandscape = vw >= vh;
-
-    // determine whether we need to rotate to match orientations
-    // Only apply rotation correction when in standalone mode (iOS Safari usually handles rotation in browser)
-    const shouldRotate = isStandalone && (videoIsLandscape !== screenIsLandscape);
-
-    // angle in degrees (0 or 90)
-    const angle = shouldRotate ? 90 : 0;
-
-    // when rotated by 90deg the effective display aspect ratio is swapped
-    const displayVideoAspect = (angle === 90 || angle === -90) ? (vidH / vidW) : (vidW / vidH);
-    const screenAspect = vw / vh;
-
-    // compute final width/height so the video covers the screen
-    let finalW, finalH;
-    if (screenAspect > displayVideoAspect) {
-      // screen is wider than video's display aspect -> match height
-      finalH = vh;
-      finalW = Math.round(vh * displayVideoAspect);
-    } else {
-      // match width
-      finalW = vw;
-      finalH = Math.round(vw / displayVideoAspect);
     }
 
-    // apply size and transform (center + optional rotation + optional mirror)
-    video.style.width = finalW + 'px';
-    video.style.height = finalH + 'px';
+    // Try to start immediately on load (will work in many browsers / if permission already granted)
+    window.addEventListener('load', () => {
+      // Kick off but don't force user gesture here
+      startCamera(true);
+    });
 
-    // build transform
-    const translate = 'translate(-50%, -50%)';
-    const rotate = angle ? ` rotate(${angle}deg)` : '';
-    const mirror = (currentFacing === 'user') ? ' scaleX(-1)
+    // If the browser blocks autoplay, allow the first user gesture to start the camera (silent)
+    function userGestureStart() {
+      if (started) return;
+      // Start camera now (this call is inside a user gesture)
+      startCamera();
+      // Request fullscreen where supported (attempt; may be ignored)
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(()=>{});
+      }
+      // remove the gesture listeners after first use
+      removeGestureListeners();
+    }
+
+    function removeGestureListeners() {
+      document.removeEventListener('click', userGestureStart);
+      document.removeEventListener('touchend', userGestureStart);
+    }
+
+    // Attach gesture listeners so camera can be started by tapping anywhere (only if needed)
+    document.addEventListener('click', userGestureStart, { passive: true });
+    document.addEventListener('touchend', userGestureStart, { passive: true });
+
+    // Hidden double-tap to toggle front/back camera (no UI)
+    let lastTap = 0;
+    document.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        // double-tap detected: toggle facing mode
+        facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+        // restart camera with new facing
+        started = false;
+        startCamera();
+      }
+      lastTap = now;
+    }, { passive: true });
+
+    // If window resizes, keep video covering viewport. The CSS with min-width/min-height + translate does this.
+    // But some iOS standalone quirks need a small reflow: reapply transform/size on resize.
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        // small nudge to re-layout the video element
+        video.style.transform = 'translate(-50%, -50%)';
+      }, 120);
+    });
+
+    // expose a tiny debug API in console if you want to force-start / stop / toggle
+    window.__camSite = {
+      start: () => startCamera(),
+      stop: () => { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; started = false; } },
+      toggleFacing: () => { facingMode = (facingMode === 'environment') ? 'user' : 'environment'; started = false; startCamera(); },
+      facingMode: () => facingMode
+    };
+  })();
+  </script>
+</body>
+</html>
