@@ -1,30 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Camera App">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon.png">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Camera App" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon.png" />
   <title>Fullscreen Camera App</title>
   <style>
-    body {
+    html, body {
       margin: 0;
       padding: 0;
-      height: 100vh;
-      overflow: hidden;
-      background-color: #000;
-    }
-    video {
-      width: 100%;
       height: 100%;
-      object-fit: cover;
-      display: block;
-      transform-origin: center;
-      transition: transform 0.3s ease;
+      background: #000;
+      overflow: hidden;
     }
+
+    /* container so we can center and overflow-hide the rotated video */
+    .video-container {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    /* video is absolutely positioned and centered; JS sets width/height & transform */
+    video {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform-origin: center center;
+      transition: transform 0.2s ease, width 0.2s ease, height 0.2s ease;
+      object-fit: cover;
+      will-change: transform, width, height;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: none;
+    }
+
     .error {
       color: white;
       text-align: center;
@@ -35,105 +50,71 @@
       left: 50%;
       transform: translate(-50%, -50%);
       width: 80%;
+      z-index: 2;
     }
   </style>
 </head>
 <body>
-  <video id="cameraFeed" autoplay playsinline></video>
-  <div id="errorMessage" class="error" style="display: none;"></div>
+  <div class="video-container">
+    <video id="cameraFeed" autoplay playsinline muted></video>
+  </div>
+  <div id="errorMessage" class="error" style="display:none;"></div>
+
   <script>
-    let currentFacingMode = 'environment'; // Start with rear camera
+    let currentFacingMode = 'environment'; // 'environment' or 'user'
+    const video = document.getElementById('cameraFeed');
+    const errorMessage = document.getElementById('errorMessage');
 
     async function startCamera(facingMode = currentFacingMode) {
-      const video = document.getElementById('cameraFeed');
-      const errorMessage = document.getElementById('errorMessage');
-      const stream = video.srcObject;
-
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop()); // Stop current stream
+      // stop previous stream
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+        video.removeAttribute('srcObject');
+        video.srcObject = null;
       }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        errorMessage.textContent = 'Camera access is not supported by this browser.';
-        errorMessage.style.display = 'block';
-        video.style.display = 'none';
+        showError('Camera access is not supported by this browser.');
         return;
       }
-
       if (!window.isSecureContext) {
-        errorMessage.textContent = 'Camera access requires a secure connection (HTTPS).';
-        errorMessage.style.display = 'block';
-        video.style.display = 'none';
+        showError('Camera access requires a secure connection (HTTPS).');
         return;
       }
 
       try {
         const newStream = await navigator.mediaDevices.getUserMedia({
-          video: { 
+          video: {
             facingMode: facingMode,
             width: { ideal: 1920 },
             height: { ideal: 1080 }
           },
           audio: false
         });
+
         video.srcObject = newStream;
         currentFacingMode = facingMode;
-        errorMessage.style.display = 'none';
-        updateVideoOrientation();
+        hideError();
+
+        // when metadata is ready we can read videoWidth/videoHeight and apply sizing/rotation
+        video.addEventListener('loadedmetadata', onVideoMetadata, { once: true });
+        await video.play().catch(() => { /* some browsers require user gesture; ignore here */ });
+
       } catch (err) {
         console.error('Error accessing camera:', err);
-        let errorText = 'Failed to access camera. ';
-        if (err.name === 'NotAllowedError') {
-          errorText += 'Please grant camera permissions and reload.';
-        } else if (err.name === 'NotFoundError') {
-          errorText += 'No camera found for this mode.';
-        } else if (err.name === 'NotReadableError') {
-          errorText += 'Camera is in use by another app.';
-        } else {
-          errorText += 'An unexpected error occurred: ' + err.message;
-        }
-        errorMessage.textContent = errorText;
-        errorMessage.style.display = 'block';
-        video.style.display = 'none';
+        let text = 'Failed to access camera. ';
+        if (err.name === 'NotAllowedError') text += 'Please grant camera permissions and reload.';
+        else if (err.name === 'NotFoundError') text += 'No camera found for this mode.';
+        else if (err.name === 'NotReadableError') text += 'Camera is in use by another app.';
+        else text += 'An unexpected error occurred: ' + err.message;
+        showError(text);
       }
     }
 
-    function updateVideoOrientation() {
-      const video = document.getElementById('cameraFeed');
-
-      if (currentFacingMode === 'user') {
-        // Mirror the selfie camera
-        video.style.transform = 'scaleX(-1)';
-      } else {
-        // Rear camera should be shown normally
-        video.style.transform = '';
-      }
+    function showError(msg) {
+      errorMessage.textContent = msg;
+      errorMessage.style.display = 'block';
+      video.style.display = 'none';
     }
 
-    // Swipe detection for switching cameras
-    let touchStartX = 0;
-    const video = document.getElementById('cameraFeed');
-    video.addEventListener('touchstart', (e) => {
-      touchStartX = e.touches[0].clientX;
-    });
-
-    video.addEventListener('touchend', (e) => {
-      const touchEndX = e.changedTouches[0].clientX;
-      const deltaX = touchEndX - touchStartX;
-      const swipeThreshold = 50;
-
-      if (deltaX < -swipeThreshold) { // Swipe left
-        currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-        startCamera(currentFacingMode);
-      }
-    });
-
-    // Initialize
-    window.addEventListener('load', startCamera);
-
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      console.log('App is running in standalone mode!');
-    }
-  </script>
-</body>
-</html>
+    func
