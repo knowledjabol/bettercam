@@ -1,45 +1,150 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Full Screen Camera</title>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: black;
-        }
-        video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <!-- PWA / iOS fullscreen hints -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Camera" />
+  <link rel="manifest" href="/manifest.json" />
+  <title>Camera</title>
+  <style>
+    /* Reset / full-bleed */
+    html,body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      background: black;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* container captures the initial tap */
+    .app {
+      position: fixed;
+      inset: 0;
+      background: black;
+      touch-action: none;
+    }
+
+    /* The video is the only visible element */
+    video#camera {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: black;
+      /* Allow touches to pass to container for the initial gesture */
+      pointer-events: none;
+    }
+
+    /* hidden accessible text for screen-readers (no visual UI) */
+    .sr-only { position: absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
+  </style>
 </head>
 <body>
-    <video id="cameraFeed" autoplay playsinline></video>
-    <script>
-        async function startCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'user' },
-                    audio: false
-                });
-                const video = document.getElementById('cameraFeed');
-                video.srcObject = stream;
-            } catch (error) {
-                console.error('Error accessing camera:', error);
-            }
-        }
+  <div class="app" id="app">
+    <video id="camera" autoplay playsinline muted></video>
+    <div class="sr-only" aria-hidden="false">Camera view. Tap anywhere to start camera.</div>
+  </div>
 
-        window.onload = startCamera;
-    </script>
+  <script>
+    const app = document.getElementById('app');
+    const video = document.getElementById('camera');
+
+    let started = false;
+    let currentFacingMode = 'environment'; // rear by default
+
+    async function startCameraAndFullscreen(event) {
+      // Only handle first user interaction
+      if (started) return;
+      started = true;
+
+      // Stop listening - we don't want any UI left
+      app.removeEventListener('click', startCameraAndFullscreen);
+      app.removeEventListener('touchend', startCameraAndFullscreen);
+
+      // Try to request fullscreen (works where allowed). This must be in a user gesture.
+      if (document.documentElement.requestFullscreen) {
+        try {
+          await document.documentElement.requestFullscreen();
+        } catch (err) {
+          // ignore if fullscreen fails
+          console.warn('requestFullscreen failed:', err && err.message);
+        }
+      }
+
+      // Start camera
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: currentFacingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false
+        });
+        video.srcObject = stream;
+        // ensure playing; some browsers require user gesture (we are in one)
+        await video.play().catch(()=>{});
+      } catch (err) {
+        console.error('Camera start failed:', err);
+        // If permission blocked or camera unavailable, do nothing visible (no UI).
+      }
+    }
+
+    // Toggle camera (no UI). You can wire this to a gesture if you want:
+    async function toggleCamera() {
+      // stop tracks
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+        video.srcObject = null;
+      }
+      currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: currentFacingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play().catch(()=>{});
+      } catch (err) {
+        console.error('toggleCamera error:', err);
+      }
+    }
+
+    // Attach initial gesture listeners (tap anywhere to start)
+    app.addEventListener('click', startCameraAndFullscreen, { once: true, passive: true });
+    app.addEventListener('touchend', startCameraAndFullscreen, { once: true, passive: true });
+
+    // Optional: double-tap with two fingers to toggle facing camera (hidden gesture)
+    let lastTap = 0;
+    app.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTap < 300 && e.touches && e.touches.length === 0) {
+        // quick double tap - toggle camera
+        toggleCamera();
+      }
+      lastTap = now;
+    }, { passive: true });
+
+    // If the PWA is reopened from home screen, try to auto-start silently (some browsers allow it)
+    window.addEventListener('load', () => {
+      // If already in standalone mode and permissions were previously granted, attempt to start without extra gesture.
+      if (navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
+        // Attempt to start only if user already granted permission previously
+        // (we still need a user gesture for fullscreen in many browsers)
+        // So we keep the first-tap behavior; this attempt is a no-op if permission not granted.
+        navigator.permissions && navigator.permissions.query({ name: 'camera' }).then(p => {
+          if (p.state === 'granted') {
+            // directly try to start camera (may still require user gesture for fullscreen)
+            startCameraAndFullscreen();
+          }
+        }).catch(()=>{});
+      }
+    });
+  </script>
 </body>
 </html>
