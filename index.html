@@ -106,11 +106,16 @@
       const video = document.getElementById('cameraFeed');
       const orientation = window.orientation || screen.orientation?.angle || 0;
       let rotate = 0;
-      if (orientation === 90 || orientation === -90) {
-        rotate = orientation;
+
+      // Adjust for iOS camera stream being 90 degrees clockwise off in landscape
+      if (orientation === 90) {
+        rotate = -90; // Counteract 90-degree clockwise rotation
+      } else if (orientation === -90) {
+        rotate = 90;  // Counteract -90-degree clockwise rotation
       } else if (orientation === 180) {
-        rotate = 180;
+        rotate = 180; // Handle upside down
       }
+
       video.style.transform = `rotate(${rotate}deg)`;
     }
 
